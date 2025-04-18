@@ -7,6 +7,8 @@ class TeamPlayoffOdds:
 
 
 class Team:
+    estimatedValue: float = 0.0
+
     def __init__(self, data: dict[str, str]):
         self.name = data["Name"]
         self.odds = TeamPlayoffOdds(data)

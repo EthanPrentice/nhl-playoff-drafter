@@ -4,7 +4,6 @@ from team import Team
 class PlayerStats:
     def __init__(self, data: dict[str, str]):
         self.age = int(data["Age"])
-        self.position = data["Pos"]
         self.games_played = int(data["GP"])
         self.goals = int(data["G"])
         self.assists = int(data["A"])
@@ -35,6 +34,7 @@ class Player:
     def __init__(self, team: Team, seasonStats: dict[str, str], stretchStats: dict[str, str]):
         self.name = seasonStats["Name"]
         self.team = team
+        self.position = seasonStats["Pos"]
         self.seasonStats = PlayerStats(seasonStats)
         self.stretchStats = PlayerStats(stretchStats)
 

@@ -19,15 +19,25 @@ def read_csv_to_dicts(filename) -> list[dict[str, str]]:
         return list(csv_reader)
 
 
-def write_dicts_to_csv(data, filename):
+def write_players_to_csv(players: list[Player], filename):
     with open(os.path.join(OUTPUT_DIR, filename), "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=data[0].keys(), delimiter="\t")
-        writer.writeheader()
-        writer.writerows(data)
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(["EV", "Name", "Team", "TEV", "Pos", "G", "A", "P"])
+        for p in players:
+            writer.writerow([f"{p.estimatedValue:.3f}", p.name, p.team.name, f"{p.team.estimatedValue:.3f}", p.position,
+                             p.seasonStats.goals, p.seasonStats.assists, p.seasonStats.points])
 
+def write_teams_to_csv(teams: list[Team], filename):
+    with open(os.path.join(OUTPUT_DIR, filename), "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(["EV", "Name"])
+        for team in teams:
+            writer.writerow([f"{team.estimatedValue:.3f}", team.name])
 
-def get_players() -> list[Player]:
-    teams = [Team(v) for v in read_csv_to_dicts("teams.tsv")]
+def get_teams():
+    return [Team(v) for v in read_csv_to_dicts("teams.tsv")]
+
+def get_players(teams: list[Team]) -> list[Player]:
     player_season_stats = read_csv_to_dicts("players_season.tsv")
     player_stretch_stats = read_csv_to_dicts("players_stretch.tsv")
 
@@ -39,11 +49,30 @@ def get_players() -> list[Player]:
                 for team in teams:
                     if team.name == season_stats["Team"]:
                         results.append(Player(team, season_stats, stretch_stats))
-        
+
     return results
 
 
-def set_estimated_values(players: list[Player], heuristic: Callable[[Player], float]):
+def write_results(teams: list[Team], players: list[Player], output_dir: str):
+    write_teams_to_csv(teams, os.path.join(output_dir, "teams.tsv"))
+
+    write_players_to_csv(players, os.path.join(output_dir, "all.tsv"))
+
+    forwards = filter(lambda x: x.position == "F", players)
+    write_players_to_csv(forwards, os.path.join(output_dir, "forwards.tsv"))
+
+    defense = filter(lambda x: x.position == "D", players)
+    write_players_to_csv(defense, os.path.join(output_dir, "defense.tsv"))
+
+
+def set_team_estimated_values(teams: list[Team], heuristic: Callable[[Team], float]):
+    for team in teams:
+        team.estimatedValue = heuristic(team)
+
+    teams.sort(key=lambda x: x.estimatedValue, reverse=True)
+
+
+def set_player_estimated_values(players: list[Player], heuristic: Callable[[Player], float]):
     for player in players:
         player.estimatedValue = heuristic(player)
 
@@ -52,13 +81,13 @@ def set_estimated_values(players: list[Player], heuristic: Callable[[Player], fl
 
 # MAIN
 def main():
-    # filter players to include key values
-    players = get_players()
+    teams = get_teams()
+    players = get_players(teams)
 
-    set_estimated_values(players, heuristics.sum_team_odds_multiply_points_stretch_weighted)
+    set_team_estimated_values(teams, heuristics.get_team_weight_diff)
+    set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_stretch_weighted)
 
-    for p in players:
-        print(p)
+    write_results(teams, players, OUTPUT_DIR)
 
     print("SUCCESS")
 
