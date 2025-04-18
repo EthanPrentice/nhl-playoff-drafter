@@ -8,7 +8,7 @@ class TeamPlayoffOdds:
 
 class Team:
     def __init__(self, data: dict[str, str]):
-        self.name = data["Team"]
+        self.name = data["Name"]
         self.odds = TeamPlayoffOdds(data)
 
     def __repr__(self):

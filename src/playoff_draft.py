@@ -1,13 +1,16 @@
 import csv
 import os
 
+from player import Player, PlayerStats
+from team import Team, TeamPlayoffOdds
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 RESOURCES_DIR = os.path.join(ROOT_DIR, "resources/2025")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "out/2025")
 
 # I/O
-def read_csv_to_dicts(filename):
+def read_csv_to_dicts(filename) -> list[dict[str, str]]:
     def tryToNum(value):
         try:
             return int(value)
@@ -33,23 +36,26 @@ def write_dicts_to_csv(data, filename):
         writer.writeheader()
         writer.writerows(data)
 
-# GENERAL
-def filter_dict_keys(data, keys):
-    return [{ k: d[k] for k in keys if k in d } for d in data]
+def get_players() -> list[Player]:
+    teams = [Team(v) for v in read_csv_to_dicts("teams.tsv")]
+    player_season_stats = read_csv_to_dicts("players_season.tsv")
+    player_stretch_stats = read_csv_to_dicts("players_stretch.tsv")
 
-# UTILS
-def get_active_team_names(teams):
-    return list(map(lambda v: v["Team"], teams))
-
-def filter_active_players(teams, players):
-    active_team_names = get_active_team_names(teams)
-    filter_fn = lambda v: v["Team"] in active_team_names
-    return list(filter(filter_fn, players))
+    # TODO: optimize, but eh who cares. small data.
+    results = []
+    for season_stats in player_season_stats:
+        for stretch_stats in player_stretch_stats:
+            if season_stats["Name"] == stretch_stats["Name"] and season_stats["Team"] == stretch_stats["Team"]:
+                for team in teams:
+                    if team.name == season_stats["Team"]:
+                        results.append(Player(team, season_stats, stretch_stats))
+        
+    return results
 
 # HEURISTICS
-def get_team_weights(data):
+def get_team_weights(players: list[Player]):
     result = {}
-    for item in data:
+    for player in players:
         if "Team" in item:
             name = item.pop("Team")
             # sum of all numbers in the dict
@@ -68,26 +74,10 @@ def append_heuristics(players, teams):
 
 # MAIN
 if __name__ == "__main__":
-    # read teams and players
-    teams = read_csv_to_dicts("teams.tsv")
+
     # filter players to include key values
-    players = filter_dict_keys(
-        data=read_csv_to_dicts("players_feb1.tsv"), 
-        keys=["Name", "Team", "Pos", "G", "A", "P"]
-    )
-    # filter for players on playoff teams
-    active_players = filter_active_players(teams, players)
+    players = get_players()
 
-    players_with_heuristics = sorted(append_heuristics(active_players, teams), key=lambda v: v["EstimatedValue"], reverse=True)
-
-    # write results for all skaters
-    write_dicts_to_csv(players_with_heuristics, "all.tsv")
-
-    # write results for F/D to separate files
-    forwards = list(filter(lambda v: v["Pos"] == "F", players_with_heuristics))
-    defensemen = list(filter(lambda v: v["Pos"] == "D", players_with_heuristics))
-
-    write_dicts_to_csv(forwards, "forward.tsv")
-    write_dicts_to_csv(defensemen, "defense.tsv")
+    print(players)
 
     print("SUCCESS")

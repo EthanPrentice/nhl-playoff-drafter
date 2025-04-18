@@ -30,10 +30,10 @@ class PlayerStats:
 
 class Player:
     def __init__(self, team: Team, seasonStats: dict[str, str], stretchStats: dict[str, str]):
-        self.name = data["Name"]
+        self.name = seasonStats["Name"]
         self.team = team
         self.seasonStats = PlayerStats(seasonStats)
         self.stretchStats = PlayerStats(stretchStats)
 
     def __repr__(self):
-        return f"{self.name} ({self.team}) - {self.seasonStats.points} points"
+        return f"{self.name} ({self.team.name}) - {self.seasonStats.points} points"
