@@ -1,5 +1,6 @@
 from team import Team
 
+
 class PlayerStats:
     def __init__(self, data: dict[str, str]):
         self.age = int(data["Age"])
@@ -29,6 +30,8 @@ class PlayerStats:
 
 
 class Player:
+    estimatedValue: float = 0.0
+
     def __init__(self, team: Team, seasonStats: dict[str, str], stretchStats: dict[str, str]):
         self.name = seasonStats["Name"]
         self.team = team
@@ -36,4 +39,4 @@ class Player:
         self.stretchStats = PlayerStats(stretchStats)
 
     def __repr__(self):
-        return f"{self.name} ({self.team.name}) - {self.seasonStats.points} points"
+        return f"{self.name} ({self.team.name}) - {self.estimatedValue:.3f} EV"
