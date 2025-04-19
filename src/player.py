@@ -12,6 +12,8 @@ class PlayerStats:
         self.plus_minus = int(data["+/-"])
         self.toi = data["TOI"]
         self.toi_es = data["ES"]
+        self.even_strength_goals = int(data["ESG"])
+        self.even_strength_points = int(data["ESP"])
         self.toi_pp = data["PP"]
         self.toi_sh = data["SH"]
         self.shots = int(data["SHOTS"])

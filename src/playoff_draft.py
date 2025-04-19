@@ -22,10 +22,11 @@ def read_csv_to_dicts(filename) -> list[dict[str, str]]:
 def write_players_to_csv(players: list[Player], filename):
     with open(os.path.join(OUTPUT_DIR, filename), "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter="\t")
-        writer.writerow(["EV", "Name", "Team", "TEV", "Pos", "G", "A", "P"])
+        writer.writerow(["EV", "Name", "Team", "TEV", "Pos", "GP", "SGP", "G", "A", "P", "ESP"])
         for p in players:
             writer.writerow([f"{p.estimatedValue:.3f}", p.name, p.team.name, f"{p.team.estimatedValue:.3f}", p.position,
-                             p.seasonStats.goals, p.seasonStats.assists, p.seasonStats.points])
+                             p.seasonStats.games_played, p.stretchStats.games_played, p.seasonStats.goals, 
+                             p.seasonStats.assists, p.seasonStats.points, p.seasonStats.even_strength_points])
 
 def write_teams_to_csv(teams: list[Team], filename):
     with open(os.path.join(OUTPUT_DIR, filename), "w", newline="", encoding="utf-8") as f:
@@ -84,8 +85,8 @@ def main():
     teams = get_teams()
     players = get_players(teams)
 
-    set_team_estimated_values(teams, heuristics.get_team_weight_diff)
-    set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_stretch_weighted)
+    set_team_estimated_values(teams, heuristics.get_team_weight_diff_penalty)
+    set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_esp_stretch_weighted_per_game)
 
     write_results(teams, players, OUTPUT_DIR)
 
