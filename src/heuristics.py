@@ -2,6 +2,16 @@ from player import Player
 from team import Team
 
 # TEAM
+def get_team_odds_2024(team: Team):
+    return sum([
+        team.odds.round1,
+        team.odds.round2,
+        team.odds.conference
+    ])
+
+def get_player_odds_2024(player: Player):
+    return player.seasonStats.points * player.team.estimatedValue
+
 def get_team_odds_direct_sum(team: Team):
     return sum([
         team.odds.round1,

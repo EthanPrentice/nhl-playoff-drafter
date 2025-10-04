@@ -85,8 +85,8 @@ def main():
     teams = get_teams()
     players = get_players(teams)
 
-    set_team_estimated_values(teams, heuristics.get_team_weight_diff_penalty)
-    set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_esp_stretch_weighted_per_game)
+    set_team_estimated_values(teams, heuristics.get_team_odds_2024)
+    set_player_estimated_values(players, heuristics.get_player_odds_2024)
 
     write_results(teams, players, OUTPUT_DIR)
 
