@@ -149,15 +149,20 @@ def estimate_expected_games(
     return results
 
 
-def project_skaters(inputs: list[SkaterProjectionInput], expected_team_games: dict[str, float]) -> list[SkaterProjection]:
+def project_skaters(
+    inputs: list[SkaterProjectionInput],
+    expected_team_games: dict[str, float],
+    stretch_shrinkage_k: int = STRETCH_SHRINKAGE_K,
+    min_stretch_gp_for_direct_weight: int = MIN_STRETCH_GP_FOR_DIRECT_WEIGHT,
+) -> list[SkaterProjection]:
     projections: list[SkaterProjection] = []
     for item in inputs:
         season_rate = rate_per_game(skater_points_from_summary(item.season_p, item.season_otg), item.season_gp)
         stretch_rate = rate_per_game(skater_points_from_summary(item.stretch_p, item.stretch_otg), item.stretch_gp)
-        if item.stretch_gp < MIN_STRETCH_GP_FOR_DIRECT_WEIGHT:
+        if item.stretch_gp < min_stretch_gp_for_direct_weight:
             blended_rate = season_rate
         else:
-            blended_rate = blend_rates(season_rate, stretch_rate, item.stretch_gp, STRETCH_SHRINKAGE_K)
+            blended_rate = blend_rates(season_rate, stretch_rate, item.stretch_gp, stretch_shrinkage_k)
         projections.append(
             SkaterProjection(
                 name=item.name,
