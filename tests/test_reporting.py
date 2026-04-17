@@ -99,10 +99,32 @@ class ReportingTests(unittest.TestCase):
 
             self.assertTrue((output_dir / "forwards.tsv").exists())
             self.assertTrue((output_dir / "defense.tsv").exists())
+            self.assertTrue((output_dir / "all.tsv").exists())
             self.assertTrue((output_dir / "goalie_teams.tsv").exists())
             self.assertTrue((output_dir / "optimal_lineup.tsv").exists())
             self.assertTrue((output_dir / "alternative_lineups.tsv").exists())
             self.assertTrue((output_dir / "team_exposure.tsv").exists())
+
+            with open(output_dir / "all.tsv", newline="", encoding="utf-8") as file_handle:
+                all_rows = list(csv.reader(file_handle, delimiter="\t"))
+            self.assertEqual(
+                all_rows[0],
+                [
+                    "rank",
+                    "name",
+                    "team",
+                    "position",
+                    "ev",
+                    "floor",
+                    "ceiling",
+                    "season_rate",
+                    "stretch_rate",
+                    "blended_rate",
+                    "team_games_factor",
+                    "stretch_weight",
+                    "confidence_band",
+                ],
+            )
 
 
 if __name__ == "__main__":

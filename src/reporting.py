@@ -148,6 +148,7 @@ def write_draft_outputs(
     alternative_lineups: dict[str, OptimizedLineup],
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    _write_projection_rankings(skater_projections, output_dir / "all.tsv")
     _write_projection_rankings((item for item in skater_projections if item.position == "F"), output_dir / "forwards.tsv")
     _write_projection_rankings((item for item in skater_projections if item.position == "D"), output_dir / "defense.tsv")
     _write_goalie_team_rankings(goalie_team_projections, output_dir / "goalie_teams.tsv")
