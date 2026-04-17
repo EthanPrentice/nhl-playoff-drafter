@@ -1,3 +1,4 @@
+import argparse
 from typing import Callable
 
 import heuristics
@@ -15,7 +16,7 @@ from data_loader import DataLoader, ResourceFiles
 from models import estimate_expected_games, project_goalie_teams, project_skaters
 from optimizer import LineupConstraints, optimize_lineup
 from player import Player
-from reporting import write_ranked_results
+from reporting import write_diagnostics, write_ranked_results
 from team import Team
 
 
@@ -55,7 +56,18 @@ def set_player_estimated_values(players: list[Player], heuristic: Callable[[Play
     players.sort(key=lambda item: item.estimatedValue, reverse=True)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate playoff draft rankings and optimized lineup.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if any player/team rows are dropped during ingest or parsing.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     loader = DataLoader(
         resources_dir=RESOURCES_DIR,
         resource_files=ResourceFiles(
@@ -64,7 +76,7 @@ def main():
             player_stretch_file=PLAYER_STRETCH_FILE,
             player_prev_season_file=PLAYER_PREV_SEASON_FILE,
         ),
-        strict=False,
+        strict=args.strict,
     )
 
     teams = loader.load_teams()
@@ -92,6 +104,7 @@ def main():
     )
 
     write_ranked_results(teams, players, OUTPUT_DIR)
+    write_diagnostics(loader.diagnostics, OUTPUT_DIR)
 
     print(loader.diagnostics_summary())
     print(
