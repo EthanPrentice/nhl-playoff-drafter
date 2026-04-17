@@ -43,6 +43,10 @@ class ModelsTests(unittest.TestCase):
         strong_games = expected_games_analytic(strong)
 
         self.assertGreater(strong_games.mean, weak_games.mean)
+        self.assertGreater(weak_games.p90, weak_games.p10)
+        self.assertGreater(strong_games.p90, strong_games.p10)
+        self.assertGreater(weak_games.std, 0)
+        self.assertGreater(strong_games.std, 0)
 
     def test_expected_games_monte_carlo_outputs_distribution(self):
         team = TeamOddsInput(team="AAA", round1=0.60, round2=0.30, conference=0.15, final=0.08)

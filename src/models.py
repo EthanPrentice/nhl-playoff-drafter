@@ -71,15 +71,32 @@ def _independent_round_probabilities(team_odds: TeamOddsInput) -> tuple[float, f
 
 def expected_games_analytic(team_odds: TeamOddsInput) -> ExpectedGamesResult:
     p1, p2, p3, _ = _independent_round_probabilities(team_odds)
+    q2 = p1
+    q3 = p1 * p2
+    q4 = p1 * p2 * p3
 
     expected_games = (
         EXPECTED_SERIES_LENGTH_R1
-        + (p1 * EXPECTED_SERIES_LENGTH_R2)
-        + (p1 * p2 * EXPECTED_SERIES_LENGTH_R3)
-        + (p1 * p2 * p3 * EXPECTED_SERIES_LENGTH_R4)
+        + (q2 * EXPECTED_SERIES_LENGTH_R2)
+        + (q3 * EXPECTED_SERIES_LENGTH_R3)
+        + (q4 * EXPECTED_SERIES_LENGTH_R4)
     )
 
-    return ExpectedGamesResult(mean=expected_games, std=0.0, p10=expected_games, p90=expected_games)
+    variance = (
+        (EXPECTED_SERIES_LENGTH_R2**2) * q2 * (1.0 - q2)
+        + (EXPECTED_SERIES_LENGTH_R3**2) * q3 * (1.0 - q3)
+        + (EXPECTED_SERIES_LENGTH_R4**2) * q4 * (1.0 - q4)
+        + (2.0 * EXPECTED_SERIES_LENGTH_R2 * EXPECTED_SERIES_LENGTH_R3 * q3 * (1.0 - q2))
+        + (2.0 * EXPECTED_SERIES_LENGTH_R2 * EXPECTED_SERIES_LENGTH_R4 * q4 * (1.0 - q2))
+        + (2.0 * EXPECTED_SERIES_LENGTH_R3 * EXPECTED_SERIES_LENGTH_R4 * q4 * (1.0 - q3))
+    )
+    std = math.sqrt(max(0.0, variance))
+    spread = 1.28155 * std
+    max_total = EXPECTED_SERIES_LENGTH_R1 + EXPECTED_SERIES_LENGTH_R2 + EXPECTED_SERIES_LENGTH_R3 + EXPECTED_SERIES_LENGTH_R4
+    p10 = max(EXPECTED_SERIES_LENGTH_R1, expected_games - spread)
+    p90 = min(max_total, expected_games + spread)
+
+    return ExpectedGamesResult(mean=expected_games, std=std, p10=p10, p90=p90)
 
 
 def _sample_series_length(rand: random.Random) -> int:
