@@ -8,6 +8,7 @@ class PlayerStats:
         self.goals = int(data.get("G", 0))
         self.assists = int(data.get("A", 0))
         self.points = int(data.get("P", 0))
+        self.overtime_goals = int(data.get("OTG", 0))
         self.pim = int(data.get("PIM", 0))
         self.plus_minus = int(data.get("+/-", 0))
         self.toi = data.get("TOI", "")
