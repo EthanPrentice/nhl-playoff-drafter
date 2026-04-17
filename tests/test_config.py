@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from config import (
+    DEFAULT_SERIES_LENGTHS,
     EXPECTED_GAMES_METHOD,
     EXPECTED_GAMES_MONTE_CARLO_SIMULATIONS,
     EXPECTED_SERIES_LENGTH_R1,
@@ -15,6 +16,8 @@ from config import (
     ROSTER,
     SCORING,
     STRETCH_SHRINKAGE_K,
+    TUNING_BASELINE,
+    TUNING_GRID,
 )
 
 
@@ -43,6 +46,14 @@ class ConfigDefaultsTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SERIES_LENGTH_R2, 5.9)
         self.assertEqual(EXPECTED_SERIES_LENGTH_R3, 5.9)
         self.assertEqual(EXPECTED_SERIES_LENGTH_R4, 5.9)
+
+    def test_tuning_manifest_defaults(self):
+        self.assertEqual(TUNING_BASELINE.method, EXPECTED_GAMES_METHOD)
+        self.assertEqual(TUNING_BASELINE.stretch_shrinkage_k, STRETCH_SHRINKAGE_K)
+        self.assertEqual(TUNING_BASELINE.min_stretch_gp_for_direct_weight, MIN_STRETCH_GP_FOR_DIRECT_WEIGHT)
+        self.assertEqual(TUNING_BASELINE.series_lengths, DEFAULT_SERIES_LENGTHS)
+        self.assertGreater(len(TUNING_GRID.methods), 0)
+        self.assertGreater(len(TUNING_GRID.series_length_profiles), 0)
 
 
 if __name__ == "__main__":

@@ -284,6 +284,52 @@ For each candidate include:
 
 ---
 
+## 8) Tuning + convergence strategy
+
+### Objective
+Systematically tune heuristics/method/config values through iterative backtests so we fit recent seasons well enough to improve 2026 predictive quality, while converging quickly toward a strong parameter valley.
+
+### Implementation details
+
+#### 8.1 Tunable parameter space
+Define a single tuning manifest in `src/config.py` (or `configs/tuning_grid.yaml`) that includes:
+- model method toggles (analytic vs Monte Carlo expected games)
+- shrinkage params (`STRETCH_SHRINKAGE_K`, minimum stretch GP threshold)
+- risk controls (`risk_lambda`, exposure/team-cap constraints)
+- series length assumptions (`E_LEN_R1..R4`) and any weighting knobs
+
+Keep defaults as the current production baseline, and version each experiment config with a stable ID.
+
+#### 8.2 Iterative search workflow
+Add `scripts/tune.py` orchestrating repeated backtests with two stages:
+1. **Coarse sweep** over broad ranges to locate promising regions.
+2. **Local refinement** around top candidates using narrower ranges/smaller step sizes.
+
+Persist all runs to `out/tuning/runs.tsv` with:
+- timestamp, git commit, config ID, season set, metrics, runtime
+- parent run ID (for refinement lineage)
+
+#### 8.3 Fast-convergence tactics
+- Start with low-cost approximations (fewer MC sims, reduced grids), then increase fidelity near best regions.
+- Use early-pruning rules: stop evaluating configs that are clearly dominated after first season split.
+- Cache reusable intermediate outputs per season/method to avoid recomputing full projections.
+- Use rolling validation splits (e.g., tune on 2024, validate on 2025; then swap/check combined stability) to avoid overfitting one year.
+
+#### 8.4 Selection criteria for 2026
+Pick final settings using a weighted score that rewards:
+- strong out-of-sample lineup performance vs baseline
+- stable rank quality across seasons/positions
+- low variance across validation splits
+
+Promote only configs that beat baseline on predeclared primary metrics (not just one-off best score).
+
+### Acceptance criteria
+- Single reproducible command runs coarse + refinement tuning and records lineage.
+- Tuning report identifies a small set of converged candidate configs with clear tradeoffs.
+- Final chosen 2026 config is justified by out-of-sample results, not in-sample best fit alone.
+
+---
+
 ## Sequential stacked-branch workflow (no Graphite; branch prefix `codex/improveHeuristics/`)
 
 Each task ships on its own branch, each branch based on previous branch head.
@@ -295,6 +341,7 @@ Each task ships on its own branch, each branch based on previous branch head.
 5. `codex/improveHeuristics/data-reliability` (base: `codex/improveHeuristics/optimizer`)
 6. `codex/improveHeuristics/backtesting` (base: `codex/improveHeuristics/data-reliability`)
 7. `codex/improveHeuristics/reporting` (base: `codex/improveHeuristics/backtesting`)
+8. `codex/improveHeuristics/tuning` (base: `codex/improveHeuristics/reporting`)
 
 ### Per-branch execution checklist
 - Implement only scoped files/functions for the branch.
