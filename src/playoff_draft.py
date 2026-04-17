@@ -37,12 +37,12 @@ def write_teams_to_csv(teams: list[Team], filename):
             writer.writerow([f"{team.estimatedValue:.3f}", team.name])
 
 def get_teams():
-    # playoff_teams = [Team(v) for v in read_csv_to_dicts("teams.tsv")]
-    return [Team.from_name(v) for v in [
-        "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL", "DAL", "DET", "EDM", "FLA", "LAK", "MIN",
-        "MTL", "NJD", "NSH", "NYI", "NYR", "OTT", "PHI", "PIT", "SEA", "SJS", "STL", "TBL", "TOR", "UTA",
-        "VAN", "VGK", "WPG", "WSH"
-    ]]
+    return [Team(v) for v in read_csv_to_dicts("teams.tsv")]
+    # return [Team.from_name(v) for v in [
+    #     "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL", "DAL", "DET", "EDM", "FLA", "LAK", "MIN",
+    #     "MTL", "NJD", "NSH", "NYI", "NYR", "OTT", "PHI", "PIT", "SEA", "SJS", "STL", "TBL", "TOR", "UTA",
+    #     "VAN", "VGK", "WPG", "WSH"
+    # ]]
 
 
 def get_players(teams: list[Team]) -> list[Player]:
@@ -122,8 +122,8 @@ def main():
     teams = get_teams()
     players = get_players(teams)
 
-    set_player_estimated_values(players, heuristics.yahoo_default_with_past)
-    set_team_estimated_values(teams, players, heuristics.get_team_weight_all_players)
+    set_team_estimated_values(teams, players, heuristics.get_team_weight_diff_penalty)
+    set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_stretch_weighted_per_game)
 
     write_results(teams, players, OUTPUT_DIR)
 

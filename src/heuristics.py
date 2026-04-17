@@ -46,9 +46,11 @@ def get_team_weight_diff(team: Team, players: list[Player]):
 def get_team_weight_diff_penalty(team: Team, players: list[Player]):
     weights = [2, 1, 1]
     odds = [team.odds.round1, team.odds.round2, team.odds.conference]
-
     result = 0
     for i in range(len(odds)):
+        if odds[i] == 0:
+            break
+        
         independent_odds = odds[i] / odds[i - 1] if i > 0 else odds[i]
 
         mid_dist = abs(independent_odds - 0.5)
