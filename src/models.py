@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from config import STRETCH_SHRINKAGE_K
+from config import MIN_STRETCH_GP_FOR_DIRECT_WEIGHT, STRETCH_SHRINKAGE_K
 from contracts import GoalieTeamProjectionInput, SkaterProjectionInput
 from scoring import blend_rates, goalie_team_points_raw, rate_per_game, skater_points_from_summary
 
@@ -24,7 +24,10 @@ def project_skaters(inputs: list[SkaterProjectionInput], expected_team_games: di
     for item in inputs:
         season_rate = rate_per_game(skater_points_from_summary(item.season_p, item.season_otg), item.season_gp)
         stretch_rate = rate_per_game(skater_points_from_summary(item.stretch_p, item.stretch_otg), item.stretch_gp)
-        blended_rate = blend_rates(season_rate, stretch_rate, item.stretch_gp, STRETCH_SHRINKAGE_K)
+        if item.stretch_gp < MIN_STRETCH_GP_FOR_DIRECT_WEIGHT:
+            blended_rate = season_rate
+        else:
+            blended_rate = blend_rates(season_rate, stretch_rate, item.stretch_gp, STRETCH_SHRINKAGE_K)
         projections.append(
             SkaterProjection(
                 name=item.name,
