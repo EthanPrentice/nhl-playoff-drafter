@@ -24,12 +24,14 @@ class SkaterProjection:
     team: str
     position: str
     expected_points: float
+    expected_points_std: float = 0.0
 
 
 @dataclass(frozen=True)
 class GoalieTeamProjection:
     team: str
     expected_points: float
+    expected_points_std: float = 0.0
 
 
 @dataclass(frozen=True)

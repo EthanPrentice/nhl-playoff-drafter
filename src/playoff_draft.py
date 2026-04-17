@@ -81,7 +81,8 @@ def main():
     goalie_team_projections = project_goalie_teams(goalie_team_inputs, expected_team_games)
 
     lineup = optimize_lineup(
-        skaters=skater_projections,
+        forwards=[x for x in skater_projections if x.position == "F"],
+        defense=[x for x in skater_projections if x.position == "D"],
         goalie_teams=goalie_team_projections,
         constraints=LineupConstraints(
             forwards=ROSTER.forwards,

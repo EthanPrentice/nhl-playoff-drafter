@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from itertools import combinations
+from typing import Iterable
 
 from models import GoalieTeamProjection, SkaterProjection
 
@@ -8,6 +10,8 @@ class LineupConstraints:
     forwards: int = 5
     defense: int = 3
     goalie_teams: int = 2
+    max_skaters_per_team: int | None = None
+    max_total_from_team_including_goalie_team: int | None = None
 
 
 @dataclass(frozen=True)
@@ -15,14 +19,157 @@ class OptimizedLineup:
     forwards: list[SkaterProjection]
     defense: list[SkaterProjection]
     goalie_teams: list[GoalieTeamProjection]
+    objective_value: float
+
+
+def _stable_skater_key(skater: SkaterProjection) -> tuple[str, str, str]:
+    return (skater.team, skater.position, skater.name)
+
+
+def _stable_goalie_team_key(goalie_team: GoalieTeamProjection) -> tuple[str]:
+    return (goalie_team.team,)
+
+
+def _score_skater(skater: SkaterProjection, risk_lambda: float) -> float:
+    return skater.expected_points - (risk_lambda * skater.expected_points_std)
+
+
+def _score_goalie_team(goalie_team: GoalieTeamProjection, risk_lambda: float) -> float:
+    return goalie_team.expected_points - (risk_lambda * goalie_team.expected_points_std)
+
+
+def _objective(
+    selected_forwards: Iterable[SkaterProjection],
+    selected_defense: Iterable[SkaterProjection],
+    selected_goalie_teams: Iterable[GoalieTeamProjection],
+    risk_lambda: float,
+) -> float:
+    total = sum(_score_skater(x, risk_lambda) for x in selected_forwards)
+    total += sum(_score_skater(x, risk_lambda) for x in selected_defense)
+    total += sum(_score_goalie_team(x, risk_lambda) for x in selected_goalie_teams)
+    return total
+
+
+def _respects_optional_team_constraints(
+    selected_forwards: tuple[SkaterProjection, ...],
+    selected_defense: tuple[SkaterProjection, ...],
+    selected_goalie_teams: tuple[GoalieTeamProjection, ...],
+    constraints: LineupConstraints,
+) -> bool:
+    if constraints.max_skaters_per_team is not None:
+        skaters_per_team: dict[str, int] = {}
+        for skater in (*selected_forwards, *selected_defense):
+            skaters_per_team[skater.team] = skaters_per_team.get(skater.team, 0) + 1
+        if any(count > constraints.max_skaters_per_team for count in skaters_per_team.values()):
+            return False
+
+    if constraints.max_total_from_team_including_goalie_team is not None:
+        total_per_team: dict[str, int] = {}
+        for skater in (*selected_forwards, *selected_defense):
+            total_per_team[skater.team] = total_per_team.get(skater.team, 0) + 1
+        for goalie_team in selected_goalie_teams:
+            total_per_team[goalie_team.team] = total_per_team.get(goalie_team.team, 0) + 1
+        if any(count > constraints.max_total_from_team_including_goalie_team for count in total_per_team.values()):
+            return False
+
+    return True
+
+
+def _validate_pool_sizes(
+    forwards: list[SkaterProjection],
+    defense: list[SkaterProjection],
+    goalie_teams: list[GoalieTeamProjection],
+    constraints: LineupConstraints,
+) -> None:
+    if len(forwards) < constraints.forwards:
+        raise ValueError(f"Not enough forwards to satisfy roster constraint: need {constraints.forwards}, got {len(forwards)}")
+    if len(defense) < constraints.defense:
+        raise ValueError(f"Not enough defense to satisfy roster constraint: need {constraints.defense}, got {len(defense)}")
+    if len(goalie_teams) < constraints.goalie_teams:
+        raise ValueError(
+            f"Not enough goalie teams to satisfy roster constraint: need {constraints.goalie_teams}, got {len(goalie_teams)}"
+        )
+
+
+def _optimize_without_cross_pool_constraints(
+    forwards: list[SkaterProjection],
+    defense: list[SkaterProjection],
+    goalie_teams: list[GoalieTeamProjection],
+    constraints: LineupConstraints,
+    risk_lambda: float,
+) -> OptimizedLineup:
+    selected_forwards = sorted(forwards, key=lambda x: (-_score_skater(x, risk_lambda), _stable_skater_key(x)))[: constraints.forwards]
+    selected_defense = sorted(defense, key=lambda x: (-_score_skater(x, risk_lambda), _stable_skater_key(x)))[: constraints.defense]
+    selected_goalie_teams = sorted(
+        goalie_teams, key=lambda x: (-_score_goalie_team(x, risk_lambda), _stable_goalie_team_key(x))
+    )[: constraints.goalie_teams]
+
+    return OptimizedLineup(
+        forwards=selected_forwards,
+        defense=selected_defense,
+        goalie_teams=selected_goalie_teams,
+        objective_value=_objective(selected_forwards, selected_defense, selected_goalie_teams, risk_lambda),
+    )
+
+
+def _optimize_with_optional_constraints(
+    forwards: list[SkaterProjection],
+    defense: list[SkaterProjection],
+    goalie_teams: list[GoalieTeamProjection],
+    constraints: LineupConstraints,
+    risk_lambda: float,
+) -> OptimizedLineup:
+    sorted_forwards = sorted(forwards, key=lambda x: (-_score_skater(x, risk_lambda), _stable_skater_key(x)))
+    sorted_defense = sorted(defense, key=lambda x: (-_score_skater(x, risk_lambda), _stable_skater_key(x)))
+    sorted_goalie_teams = sorted(
+        goalie_teams, key=lambda x: (-_score_goalie_team(x, risk_lambda), _stable_goalie_team_key(x))
+    )
+
+    best: tuple[float, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]], OptimizedLineup] | None = None
+    for forward_selection in combinations(sorted_forwards, constraints.forwards):
+        for defense_selection in combinations(sorted_defense, constraints.defense):
+            for goalie_selection in combinations(sorted_goalie_teams, constraints.goalie_teams):
+                if not _respects_optional_team_constraints(
+                    selected_forwards=forward_selection,
+                    selected_defense=defense_selection,
+                    selected_goalie_teams=goalie_selection,
+                    constraints=constraints,
+                ):
+                    continue
+
+                objective_value = _objective(forward_selection, defense_selection, goalie_selection, risk_lambda)
+                tiebreak_key = (
+                    tuple(x.name for x in forward_selection),
+                    tuple(x.name for x in defense_selection),
+                    tuple(x.team for x in goalie_selection),
+                )
+                lineup = OptimizedLineup(
+                    forwards=list(forward_selection),
+                    defense=list(defense_selection),
+                    goalie_teams=list(goalie_selection),
+                    objective_value=objective_value,
+                )
+                if best is None or objective_value > best[0] or (objective_value == best[0] and tiebreak_key < best[1]):
+                    best = (objective_value, tiebreak_key, lineup)
+
+    if best is None:
+        raise ValueError("No feasible lineup satisfies the provided constraints")
+    return best[2]
 
 
 def optimize_lineup(
-    skaters: list[SkaterProjection],
+    forwards: list[SkaterProjection],
+    defense: list[SkaterProjection],
     goalie_teams: list[GoalieTeamProjection],
     constraints: LineupConstraints,
+    risk_lambda: float = 0.0,
 ) -> OptimizedLineup:
-    forwards = sorted((x for x in skaters if x.position == "F"), key=lambda x: x.expected_points, reverse=True)[: constraints.forwards]
-    defense = sorted((x for x in skaters if x.position == "D"), key=lambda x: x.expected_points, reverse=True)[: constraints.defense]
-    selected_goalie_teams = sorted(goalie_teams, key=lambda x: x.expected_points, reverse=True)[: constraints.goalie_teams]
-    return OptimizedLineup(forwards=forwards, defense=defense, goalie_teams=selected_goalie_teams)
+    _validate_pool_sizes(forwards, defense, goalie_teams, constraints)
+
+    has_optional_team_constraints = (
+        constraints.max_skaters_per_team is not None or constraints.max_total_from_team_including_goalie_team is not None
+    )
+    if not has_optional_team_constraints:
+        return _optimize_without_cross_pool_constraints(forwards, defense, goalie_teams, constraints, risk_lambda)
+
+    return _optimize_with_optional_constraints(forwards, defense, goalie_teams, constraints, risk_lambda)
