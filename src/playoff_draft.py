@@ -2,7 +2,7 @@ from typing import Callable
 
 import heuristics
 from config import (
-    DEFAULT_EXPECTED_TEAM_GAMES,
+    EXPECTED_GAMES_METHOD,
     OUTPUT_DIR,
     PLAYER_PREV_SEASON_FILE,
     PLAYER_SEASON_FILE,
@@ -12,7 +12,7 @@ from config import (
     TEAM_FILE,
 )
 from data_loader import DataLoader, ResourceFiles
-from models import project_goalie_teams, project_skaters
+from models import estimate_expected_games, project_goalie_teams, project_skaters
 from optimizer import LineupConstraints, optimize_lineup
 from player import Player
 from reporting import write_ranked_results
@@ -55,10 +55,6 @@ def set_player_estimated_values(players: list[Player], heuristic: Callable[[Play
     players.sort(key=lambda item: item.estimatedValue, reverse=True)
 
 
-def _build_expected_games_map(teams: list[Team]) -> dict[str, float]:
-    return {team.name: team.estimatedValue * DEFAULT_EXPECTED_TEAM_GAMES for team in teams}
-
-
 def main():
     loader = DataLoader(
         resources_dir=RESOURCES_DIR,
@@ -77,7 +73,8 @@ def main():
     set_team_estimated_values(teams, players, heuristics.get_team_weight_diff_penalty)
     set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_stretch_weighted_per_game)
 
-    expected_team_games = _build_expected_games_map(teams)
+    expected_games_stats = estimate_expected_games(loader.to_team_odds_inputs(teams), method=EXPECTED_GAMES_METHOD)
+    expected_team_games = {team: stats.mean for team, stats in expected_games_stats.items()}
     skater_inputs = loader.to_skater_projection_inputs(players)
     goalie_team_inputs = loader.to_goalie_team_projection_inputs(teams)
     skater_projections = project_skaters(skater_inputs, expected_team_games)
