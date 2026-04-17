@@ -1,8 +1,8 @@
-from player import Player
+from player import Player, PlayerStats
 from team import Team
 
 # TEAM
-def get_team_odds_2024(team: Team):
+def get_team_odds_2024(team: Team, players: list[Player]):
     return sum([
         team.odds.round1,
         team.odds.round2,
@@ -12,7 +12,8 @@ def get_team_odds_2024(team: Team):
 def get_player_odds_2024(player: Player):
     return player.seasonStats.points * player.team.estimatedValue
 
-def get_team_odds_direct_sum(team: Team):
+
+def get_team_odds_direct_sum(team: Team, players: list[Player]):
     return sum([
         team.odds.round1,
         team.odds.round2 / team.odds.round1,
@@ -20,7 +21,7 @@ def get_team_odds_direct_sum(team: Team):
     ])
 
 
-def get_team_odds_real_sum(team: Team):
+def get_team_odds_real_sum(team: Team, players: list[Player]):
     return sum([
         team.odds.round1,
         team.odds.round2 / team.odds.round1,
@@ -28,7 +29,7 @@ def get_team_odds_real_sum(team: Team):
     ])
 
 
-def get_team_weight_diff(team: Team):
+def get_team_weight_diff(team: Team, players: list[Player]):
     weights = [3, 1, 1]
     odds = [team.odds.round1, team.odds.round2, team.odds.conference]
 
@@ -42,7 +43,7 @@ def get_team_weight_diff(team: Team):
     return result / sum(weights)
 
 
-def get_team_weight_diff_penalty(team: Team):
+def get_team_weight_diff_penalty(team: Team, players: list[Player]):
     weights = [2, 1, 1]
     odds = [team.odds.round1, team.odds.round2, team.odds.conference]
 
@@ -57,6 +58,15 @@ def get_team_weight_diff_penalty(team: Team):
         result += independent_odds / 0.5 * weights[i]
     
     return result / sum(weights)
+
+
+# TOTAL SEASON TEAM HEURISTICS
+def get_team_weight_all_players(team: Team, players: list[Player]) -> float:
+    team_players = filter(lambda x: x.team.name == team.name, players)
+    # take top 12 players since it is a smaller league
+    team_players_ev = sorted(map(lambda x: x.estimatedValue, team_players), reverse=True)[:12]
+    return sum(team_players_ev)
+
 
 # PLAYER
 def sum_team_odds_multiply_points(player: Player) -> float:
@@ -87,3 +97,32 @@ def sum_team_odds_multiply_points_esp_stretch_weighted_per_game(player: Player) 
         return player.team.estimatedValue * seasonEV
     else:
         return player.team.estimatedValue * (0.3 * seasonEV + 0.7 * stretchEV)
+
+
+def yahoo_default_single(playerStats: PlayerStats) -> float:
+    value_sum = 0.0
+    value_sum += 3 * playerStats.goals
+    value_sum += 2 * playerStats.assists
+    value_sum += 0.5 * playerStats.plus_minus
+    value_sum += 2 * (playerStats.points - playerStats.even_strength_points)
+    value_sum += 0.5 * playerStats.shots
+    value_sum += 0.5 * playerStats.blocks
+    value_sum += 0.5 * playerStats.hits
+    return value_sum
+
+
+def yahoo_default(player: Player) -> float:
+    if player.position == "F" or player.position == "D":
+        return yahoo_default_single(player.seasonStats)
+    else:       # player.position == "G"
+        pass    # fill in if we get goalie stats
+
+
+def yahoo_default_with_past(player: Player) -> float:
+    value_sum = 0.0
+    if player.position == "F" or player.position == "D":
+        value_sum += 0.7 * yahoo_default_single(player.seasonStats)
+        value_sum += 0.3 * yahoo_default_single(player.prevSeasonStats)
+    else:       # player.position == "G"
+        pass    # fill in if we get goalie stats
+    return value_sum

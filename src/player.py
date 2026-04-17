@@ -3,28 +3,28 @@ from team import Team
 
 class PlayerStats:
     def __init__(self, data: dict[str, str]):
-        self.age = int(data["Age"])
-        self.games_played = int(data["GP"])
-        self.goals = int(data["G"])
-        self.assists = int(data["A"])
-        self.points = int(data["P"])
-        self.pim = int(data["PIM"])
-        self.plus_minus = int(data["+/-"])
-        self.toi = data["TOI"]
-        self.toi_es = data["ES"]
-        self.even_strength_goals = int(data["ESG"])
-        self.even_strength_points = int(data["ESP"])
-        self.toi_pp = data["PP"]
-        self.toi_sh = data["SH"]
-        self.shots = int(data["SHOTS"])
-        self.hits = int(data["HITS"])
-        self.blocks = int(data["BS"])
-        self.fow = int(data["FOW"])
-        self.fol = int(data["FOL"])
+        self.age = int(data.get("Age", 0))
+        self.games_played = int(data.get("GP", 0))
+        self.goals = int(data.get("G", 0))
+        self.assists = int(data.get("A", 0))
+        self.points = int(data.get("P", 0))
+        self.pim = int(data.get("PIM", 0))
+        self.plus_minus = int(data.get("+/-", 0))
+        self.toi = data.get("TOI", "")
+        self.toi_es = data.get("ES", "")
+        self.even_strength_goals = int(data.get("ESG", 0))
+        self.even_strength_points = int(data.get("ESP", 0))
+        self.toi_pp = data.get("PP", "")
+        self.toi_sh = data.get("SH", "")
+        self.shots = int(data.get("SHOTS", 0))
+        self.hits = int(data.get("HITS", 0))
+        self.blocks = int(data.get("BS", 0))
+        self.fow = int(data.get("FOW", 0))
+        self.fol = int(data.get("FOL", 0))
 
-        self.sh_pct = self._parse_percent(data["SH%"])
-        self.fo_pct = self._parse_percent(data["FO%"])
-        self.ppp_pct = self._parse_percent(data["PPP%"])
+        self.sh_pct = self._parse_percent(data.get("SH%", "0%"))
+        self.fo_pct = self._parse_percent(data.get("FO%", "0%"))
+        self.ppp_pct = self._parse_percent(data.get("PPP%", "0%"))
 
     def _parse_percent(self, val: str) -> float:
         return float(val.strip('%')) / 100 if val else 0.0
@@ -33,12 +33,13 @@ class PlayerStats:
 class Player:
     estimatedValue: float = 0.0
 
-    def __init__(self, team: Team, seasonStats: dict[str, str], stretchStats: dict[str, str]):
+    def __init__(self, team: Team, seasonStats: dict[str, str], stretchStats: dict[str, str], prevSeasonStats: [dict[str, str]] = {}):
         self.name = seasonStats["Name"]
         self.team = team
         self.position = seasonStats["Pos"]
         self.seasonStats = PlayerStats(seasonStats)
         self.stretchStats = PlayerStats(stretchStats)
+        self.prevSeasonStats = PlayerStats(prevSeasonStats)
 
     def __repr__(self):
         return f"{self.name} ({self.team.name}) - {self.estimatedValue:.3f} EV"
