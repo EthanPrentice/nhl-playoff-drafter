@@ -74,6 +74,8 @@ def get_players(teams: list[Team]) -> list[Player]:
 
 
 def write_results(teams: list[Team], players: list[Player], output_dir: str):
+    os.makedirs(output_dir, exist_ok=True)
+
     write_teams_to_csv(teams, os.path.join(output_dir, "teams.tsv"))
 
     write_players_to_csv(players, os.path.join(output_dir, "all.tsv"))
