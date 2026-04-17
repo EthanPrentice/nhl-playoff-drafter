@@ -10,14 +10,21 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from backtesting import SeasonBacktestResult, run_season_backtest
+from config import EXPECTED_GAMES_METHOD, RISK_LAMBDA, STRETCH_SHRINKAGE_K
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run playoff drafter backtesting across seasons and parameter grids.")
     parser.add_argument("--seasons", nargs="+", type=int, required=True, help="Season years to evaluate, e.g. 2024 2025")
-    parser.add_argument("--method", choices=["analytic", "monte_carlo"], default="analytic")
-    parser.add_argument("--k-values", nargs="+", type=int, default=[20], help="Shrinkage K values to evaluate")
-    parser.add_argument("--risk-lambda-grid", nargs="+", type=float, default=[0.0])
+    parser.add_argument("--method", choices=["analytic", "monte_carlo"], default=EXPECTED_GAMES_METHOD)
+    parser.add_argument(
+        "--k-values",
+        nargs="+",
+        type=int,
+        default=[STRETCH_SHRINKAGE_K],
+        help="Shrinkage K values to evaluate",
+    )
+    parser.add_argument("--risk-lambda-grid", nargs="+", type=float, default=[RISK_LAMBDA])
     parser.add_argument(
         "--realized-root",
         type=Path,

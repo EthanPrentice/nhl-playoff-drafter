@@ -8,6 +8,7 @@ from config import (
     PLAYER_PREV_SEASON_FILE,
     PLAYER_SEASON_FILE,
     PLAYER_STRETCH_FILE,
+    RISK_LAMBDA,
     RESOURCES_DIR,
     ROSTER,
     TEAM_FILE,
@@ -116,6 +117,7 @@ def main():
             defense=ROSTER.defense,
             goalie_teams=ROSTER.goalie_teams,
         ),
+        risk_lambda=RISK_LAMBDA,
     )
     high_floor_lineup = optimize_lineup(
         forwards=[x for x in skater_projections if x.position == "F"],
