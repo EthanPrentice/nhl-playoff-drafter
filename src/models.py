@@ -15,7 +15,7 @@ from config import (
     STRETCH_SHRINKAGE_K,
 )
 from contracts import GoalieTeamProjectionInput, SkaterProjectionInput, TeamOddsInput
-from scoring import blend_rates, goalie_team_points_raw, rate_per_game, skater_points_from_summary
+from scoring import blend_rates, rate_per_game, skater_points_from_summary
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,13 @@ class SkaterProjection:
     position: str
     expected_points: float
     expected_points_std: float = 0.0
+    floor_points: float = 0.0
+    ceiling_points: float = 0.0
+    season_rate: float = 0.0
+    stretch_rate: float = 0.0
+    blended_rate: float = 0.0
+    stretch_weight: float = 0.0
+    team_games_factor: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,12 @@ class GoalieTeamProjection:
     team: str
     expected_points: float
     expected_points_std: float = 0.0
+    floor_points: float = 0.0
+    ceiling_points: float = 0.0
+    wins_component: float = 0.0
+    assists_component: float = 0.0
+    shutouts_component: float = 0.0
+    team_games_factor: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -58,15 +71,32 @@ def _independent_round_probabilities(team_odds: TeamOddsInput) -> tuple[float, f
 
 def expected_games_analytic(team_odds: TeamOddsInput) -> ExpectedGamesResult:
     p1, p2, p3, _ = _independent_round_probabilities(team_odds)
+    q2 = p1
+    q3 = p1 * p2
+    q4 = p1 * p2 * p3
 
     expected_games = (
         EXPECTED_SERIES_LENGTH_R1
-        + (p1 * EXPECTED_SERIES_LENGTH_R2)
-        + (p1 * p2 * EXPECTED_SERIES_LENGTH_R3)
-        + (p1 * p2 * p3 * EXPECTED_SERIES_LENGTH_R4)
+        + (q2 * EXPECTED_SERIES_LENGTH_R2)
+        + (q3 * EXPECTED_SERIES_LENGTH_R3)
+        + (q4 * EXPECTED_SERIES_LENGTH_R4)
     )
 
-    return ExpectedGamesResult(mean=expected_games, std=0.0, p10=expected_games, p90=expected_games)
+    variance = (
+        (EXPECTED_SERIES_LENGTH_R2**2) * q2 * (1.0 - q2)
+        + (EXPECTED_SERIES_LENGTH_R3**2) * q3 * (1.0 - q3)
+        + (EXPECTED_SERIES_LENGTH_R4**2) * q4 * (1.0 - q4)
+        + (2.0 * EXPECTED_SERIES_LENGTH_R2 * EXPECTED_SERIES_LENGTH_R3 * q3 * (1.0 - q2))
+        + (2.0 * EXPECTED_SERIES_LENGTH_R2 * EXPECTED_SERIES_LENGTH_R4 * q4 * (1.0 - q2))
+        + (2.0 * EXPECTED_SERIES_LENGTH_R3 * EXPECTED_SERIES_LENGTH_R4 * q4 * (1.0 - q3))
+    )
+    std = math.sqrt(max(0.0, variance))
+    spread = 1.28155 * std
+    max_total = EXPECTED_SERIES_LENGTH_R1 + EXPECTED_SERIES_LENGTH_R2 + EXPECTED_SERIES_LENGTH_R3 + EXPECTED_SERIES_LENGTH_R4
+    p10 = max(EXPECTED_SERIES_LENGTH_R1, expected_games - spread)
+    p90 = min(max_total, expected_games + spread)
+
+    return ExpectedGamesResult(mean=expected_games, std=std, p10=p10, p90=p90)
 
 
 def _sample_series_length(rand: random.Random) -> int:
@@ -152,36 +182,77 @@ def estimate_expected_games(
 def project_skaters(
     inputs: list[SkaterProjectionInput],
     expected_team_games: dict[str, float],
+    expected_team_games_std: dict[str, float] | None = None,
+    expected_team_games_p10: dict[str, float] | None = None,
+    expected_team_games_p90: dict[str, float] | None = None,
     stretch_shrinkage_k: int = STRETCH_SHRINKAGE_K,
     min_stretch_gp_for_direct_weight: int = MIN_STRETCH_GP_FOR_DIRECT_WEIGHT,
 ) -> list[SkaterProjection]:
+    team_games_std = expected_team_games_std or {}
+    team_games_p10 = expected_team_games_p10 or {}
+    team_games_p90 = expected_team_games_p90 or {}
     projections: list[SkaterProjection] = []
     for item in inputs:
         season_rate = rate_per_game(skater_points_from_summary(item.season_p, item.season_otg), item.season_gp)
         stretch_rate = rate_per_game(skater_points_from_summary(item.stretch_p, item.stretch_otg), item.stretch_gp)
         if item.stretch_gp < min_stretch_gp_for_direct_weight:
             blended_rate = season_rate
+            stretch_weight = 0.0
         else:
             blended_rate = blend_rates(season_rate, stretch_rate, item.stretch_gp, stretch_shrinkage_k)
+            stretch_weight = item.stretch_gp / (item.stretch_gp + stretch_shrinkage_k) if item.stretch_gp > 0 else 0.0
+        team_games = expected_team_games.get(item.team, 0.0)
+        team_floor_games = team_games_p10.get(item.team, team_games)
+        team_ceiling_games = team_games_p90.get(item.team, team_games)
         projections.append(
             SkaterProjection(
                 name=item.name,
                 team=item.team,
                 position=item.position,
-                expected_points=blended_rate * expected_team_games.get(item.team, 0.0),
+                expected_points=blended_rate * team_games,
+                expected_points_std=blended_rate * team_games_std.get(item.team, 0.0),
+                floor_points=blended_rate * team_floor_games,
+                ceiling_points=blended_rate * team_ceiling_games,
+                season_rate=season_rate,
+                stretch_rate=stretch_rate,
+                blended_rate=blended_rate,
+                stretch_weight=stretch_weight,
+                team_games_factor=team_games,
             )
         )
     return projections
 
 
-def project_goalie_teams(inputs: list[GoalieTeamProjectionInput], expected_team_games: dict[str, float]) -> list[GoalieTeamProjection]:
+def project_goalie_teams(
+    inputs: list[GoalieTeamProjectionInput],
+    expected_team_games: dict[str, float],
+    expected_team_games_std: dict[str, float] | None = None,
+    expected_team_games_p10: dict[str, float] | None = None,
+    expected_team_games_p90: dict[str, float] | None = None,
+) -> list[GoalieTeamProjection]:
+    team_games_std = expected_team_games_std or {}
+    team_games_p10 = expected_team_games_p10 or {}
+    team_games_p90 = expected_team_games_p90 or {}
     projections: list[GoalieTeamProjection] = []
     for item in inputs:
-        per_game = rate_per_game(
-            goalie_team_points_raw(item.season_wins, item.season_goaltender_assists, item.season_shutouts),
-            82,
-        )
+        wins_per_game = rate_per_game(item.season_wins, 82)
+        assists_per_game = rate_per_game(item.season_goaltender_assists, 82)
+        shutouts_per_game = rate_per_game(item.season_shutouts * 5, 82)
+        per_game = wins_per_game + assists_per_game + shutouts_per_game
+        team_games = expected_team_games.get(item.team, 0.0)
+        team_floor_games = team_games_p10.get(item.team, team_games)
+        team_ceiling_games = team_games_p90.get(item.team, team_games)
         projections.append(
-            GoalieTeamProjection(team=item.team, expected_points=per_game * expected_team_games.get(item.team, 0.0))
+            GoalieTeamProjection(
+                team=item.team,
+                expected_points=per_game * team_games,
+                expected_points_std=per_game * team_games_std.get(item.team, 0.0),
+                floor_points=per_game * team_floor_games,
+                ceiling_points=per_game * team_ceiling_games,
+                wins_component=wins_per_game * team_games,
+                assists_component=assists_per_game * team_games,
+                shutouts_component=shutouts_per_game * team_games,
+                team_games_factor=team_games,
+            )
         )
     return projections
