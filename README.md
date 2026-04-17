@@ -233,6 +233,12 @@ Run the tuning harness:
 python scripts/tune.py --seasons 2024 2025
 ```
 
+To include team-exposure cap constraints in the tuning grid (slower due constrained combinatorial lineup search):
+
+```bash
+python scripts/tune.py --seasons 2024 2025 --include-exposure-caps
+```
+
 Tuning outputs:
 - `out/tuning/runs.tsv` (timestamp, git commit, config ID, stage, parent run lineage, runtime, and metrics)
 - `out/tuning/candidates.tsv` (top converged candidate configs that pass baseline gates)

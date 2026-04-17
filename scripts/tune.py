@@ -24,6 +24,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coarse-limit", type=int, default=None, help="Optional cap on number of coarse configs")
     parser.add_argument("--refine-top-k", type=int, default=TUNING_GRID.refinement_top_k)
     parser.add_argument("--prune-margin", type=float, default=0.75, help="Early-pruning margin vs best split score")
+    parser.add_argument(
+        "--include-exposure-caps",
+        action="store_true",
+        help="Include max_skaters/max_total team exposure caps in the search grid (slower).",
+    )
     parser.add_argument("--realized-root", type=Path, default=None)
     return parser.parse_args()
 
@@ -50,15 +55,17 @@ def _rolling_validation_splits(seasons: list[int]) -> list[tuple[list[int], list
     return splits
 
 
-def _coarse_configs() -> list[TuningConfig]:
+def _coarse_configs(include_exposure_caps: bool) -> list[TuningConfig]:
     configs: list[TuningConfig] = []
+    max_skaters_values = TUNING_GRID.max_skaters_per_team_values if include_exposure_caps else (None,)
+    max_total_values = TUNING_GRID.max_total_from_team_values if include_exposure_caps else (None,)
     for method in TUNING_GRID.methods:
         mc_sims = TUNING_GRID.coarse_monte_carlo_simulations if method == "monte_carlo" else TUNING_BASELINE.monte_carlo_simulations
         for shrinkage_k in TUNING_GRID.shrinkage_k_values:
             for min_stretch_gp in TUNING_GRID.min_stretch_gp_values:
                 for risk_lambda in TUNING_GRID.risk_lambda_values:
-                    for max_skaters in TUNING_GRID.max_skaters_per_team_values:
-                        for max_total in TUNING_GRID.max_total_from_team_values:
+                    for max_skaters in max_skaters_values:
+                        for max_total in max_total_values:
                             if max_skaters is not None and max_total is not None and max_total < max_skaters:
                                 continue
                             for series_profile in TUNING_GRID.series_length_profiles:
@@ -77,7 +84,7 @@ def _coarse_configs() -> list[TuningConfig]:
     return sorted(configs, key=lambda config: config.stable_id())
 
 
-def _refined_neighbors(config: TuningConfig) -> list[TuningConfig]:
+def _refined_neighbors(config: TuningConfig, include_exposure_caps: bool) -> list[TuningConfig]:
     refined: dict[str, TuningConfig] = {}
     for dk in (-5, 5):
         refined_cfg = replace(config, stretch_shrinkage_k=max(5, config.stretch_shrinkage_k + dk))
@@ -107,23 +114,24 @@ def _refined_neighbors(config: TuningConfig) -> list[TuningConfig]:
         )
         refined[refined_cfg.stable_id()] = refined_cfg
 
-    for max_skaters in (None, 3):
-        refined_cfg = replace(config, max_skaters_per_team=max_skaters)
-        if (
-            refined_cfg.max_skaters_per_team is None
-            or refined_cfg.max_total_from_team_including_goalie_team is None
-            or refined_cfg.max_total_from_team_including_goalie_team >= refined_cfg.max_skaters_per_team
-        ):
-            refined[refined_cfg.stable_id()] = refined_cfg
+    if include_exposure_caps:
+        for max_skaters in (None, 3):
+            refined_cfg = replace(config, max_skaters_per_team=max_skaters)
+            if (
+                refined_cfg.max_skaters_per_team is None
+                or refined_cfg.max_total_from_team_including_goalie_team is None
+                or refined_cfg.max_total_from_team_including_goalie_team >= refined_cfg.max_skaters_per_team
+            ):
+                refined[refined_cfg.stable_id()] = refined_cfg
 
-    for max_total in (None, 3, 4):
-        refined_cfg = replace(config, max_total_from_team_including_goalie_team=max_total)
-        if (
-            refined_cfg.max_skaters_per_team is None
-            or refined_cfg.max_total_from_team_including_goalie_team is None
-            or refined_cfg.max_total_from_team_including_goalie_team >= refined_cfg.max_skaters_per_team
-        ):
-            refined[refined_cfg.stable_id()] = refined_cfg
+        for max_total in (None, 3, 4):
+            refined_cfg = replace(config, max_total_from_team_including_goalie_team=max_total)
+            if (
+                refined_cfg.max_skaters_per_team is None
+                or refined_cfg.max_total_from_team_including_goalie_team is None
+                or refined_cfg.max_total_from_team_including_goalie_team >= refined_cfg.max_skaters_per_team
+            ):
+                refined[refined_cfg.stable_id()] = refined_cfg
 
     for stable_id, candidate in list(refined.items()):
         if candidate.method == "monte_carlo":
@@ -294,7 +302,7 @@ def main() -> None:
     split_baseline_best: dict[int, float] = {}
     all_rows: list[dict[str, str]] = []
 
-    coarse_configs = _coarse_configs()
+    coarse_configs = _coarse_configs(include_exposure_caps=args.include_exposure_caps)
     if args.coarse_limit is not None:
         coarse_configs = coarse_configs[: args.coarse_limit]
 
@@ -352,7 +360,7 @@ def main() -> None:
 
     refined_scores: list[TuningScore] = []
     for parent in coarse_best:
-        for config in _refined_neighbors(parent.config):
+        for config in _refined_neighbors(parent.config, include_exposure_caps=args.include_exposure_caps):
             start = time.perf_counter()
             score, _ = _evaluate_config(
                 config=config,
