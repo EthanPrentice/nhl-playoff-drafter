@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import ROSTER, SCORING
+from config import MIN_STRETCH_GP_FOR_DIRECT_WEIGHT, ROSTER, SCORING, STRETCH_SHRINKAGE_K
 
 
 class ConfigDefaultsTests(unittest.TestCase):
@@ -20,6 +20,10 @@ class ConfigDefaultsTests(unittest.TestCase):
         self.assertEqual(ROSTER.forwards, 5)
         self.assertEqual(ROSTER.defense, 3)
         self.assertEqual(ROSTER.goalie_teams, 2)
+
+    def test_stretch_tunables_defaults(self):
+        self.assertEqual(STRETCH_SHRINKAGE_K, 20)
+        self.assertEqual(MIN_STRETCH_GP_FOR_DIRECT_WEIGHT, 10)
 
 
 if __name__ == "__main__":
