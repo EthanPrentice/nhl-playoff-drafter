@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Iterable
 
 from data_loader import LoadDiagnostics
+from models import GoalieTeamProjection, SkaterProjection
+from optimizer import OptimizedLineup
 from player import Player
 from team import Team
 
@@ -48,6 +50,134 @@ def write_ranked_results(teams: list[Team], players: list[Player], output_dir: P
     write_players_to_tsv(players, output_dir / "all.tsv")
     write_players_to_tsv((player for player in players if player.position == "F"), output_dir / "forwards.tsv")
     write_players_to_tsv((player for player in players if player.position == "D"), output_dir / "defense.tsv")
+
+
+def _write_projection_rankings(
+    projections: Iterable[SkaterProjection],
+    output_path: Path,
+) -> None:
+    rows = sorted(projections, key=lambda item: (-item.expected_points, item.team, item.name))
+    with open(output_path, "w", newline="", encoding="utf-8") as file_handle:
+        writer = csv.writer(file_handle, delimiter="\t")
+        writer.writerow(
+            [
+                "rank",
+                "name",
+                "team",
+                "position",
+                "ev",
+                "floor",
+                "ceiling",
+                "season_rate",
+                "stretch_rate",
+                "blended_rate",
+                "team_games_factor",
+                "stretch_weight",
+                "confidence_band",
+            ]
+        )
+        for idx, item in enumerate(rows, start=1):
+            writer.writerow(
+                [
+                    idx,
+                    item.name,
+                    item.team,
+                    item.position,
+                    f"{item.expected_points:.3f}",
+                    f"{item.floor_points:.3f}",
+                    f"{item.ceiling_points:.3f}",
+                    f"{item.season_rate:.3f}",
+                    f"{item.stretch_rate:.3f}",
+                    f"{item.blended_rate:.3f}",
+                    f"{item.team_games_factor:.3f}",
+                    f"{item.stretch_weight:.3f}",
+                    f"{item.floor_points:.3f}..{item.ceiling_points:.3f}",
+                ]
+            )
+
+
+def _write_goalie_team_rankings(goalie_teams: Iterable[GoalieTeamProjection], output_path: Path) -> None:
+    rows = sorted(goalie_teams, key=lambda item: (-item.expected_points, item.team))
+    with open(output_path, "w", newline="", encoding="utf-8") as file_handle:
+        writer = csv.writer(file_handle, delimiter="\t")
+        writer.writerow(
+            [
+                "rank",
+                "team",
+                "ev",
+                "floor",
+                "ceiling",
+                "w_component",
+                "a_component",
+                "so_component",
+                "team_games_factor",
+                "confidence_band",
+            ]
+        )
+        for idx, item in enumerate(rows, start=1):
+            writer.writerow(
+                [
+                    idx,
+                    item.team,
+                    f"{item.expected_points:.3f}",
+                    f"{item.floor_points:.3f}",
+                    f"{item.ceiling_points:.3f}",
+                    f"{item.wins_component:.3f}",
+                    f"{item.assists_component:.3f}",
+                    f"{item.shutouts_component:.3f}",
+                    f"{item.team_games_factor:.3f}",
+                    f"{item.floor_points:.3f}..{item.ceiling_points:.3f}",
+                ]
+            )
+
+
+def _iter_lineup_rows(label: str, lineup: OptimizedLineup) -> Iterable[list[str]]:
+    for player in lineup.forwards:
+        yield [label, "F", player.name, player.team, f"{player.expected_points:.3f}", f"{player.floor_points:.3f}", f"{player.ceiling_points:.3f}"]
+    for player in lineup.defense:
+        yield [label, "D", player.name, player.team, f"{player.expected_points:.3f}", f"{player.floor_points:.3f}", f"{player.ceiling_points:.3f}"]
+    for team in lineup.goalie_teams:
+        yield [label, "GT", team.team, team.team, f"{team.expected_points:.3f}", f"{team.floor_points:.3f}", f"{team.ceiling_points:.3f}"]
+
+
+def write_draft_outputs(
+    output_dir: Path,
+    skater_projections: list[SkaterProjection],
+    goalie_team_projections: list[GoalieTeamProjection],
+    optimal_lineup: OptimizedLineup,
+    alternative_lineups: dict[str, OptimizedLineup],
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_projection_rankings((item for item in skater_projections if item.position == "F"), output_dir / "forwards.tsv")
+    _write_projection_rankings((item for item in skater_projections if item.position == "D"), output_dir / "defense.tsv")
+    _write_goalie_team_rankings(goalie_team_projections, output_dir / "goalie_teams.tsv")
+
+    with open(output_dir / "optimal_lineup.tsv", "w", newline="", encoding="utf-8") as file_handle:
+        writer = csv.writer(file_handle, delimiter="\t")
+        writer.writerow(["lineup", "slot", "name", "team", "ev", "floor", "ceiling"])
+        for row in _iter_lineup_rows("optimal", optimal_lineup):
+            writer.writerow(row)
+
+    with open(output_dir / "alternative_lineups.tsv", "w", newline="", encoding="utf-8") as file_handle:
+        writer = csv.writer(file_handle, delimiter="\t")
+        writer.writerow(["lineup", "slot", "name", "team", "ev", "floor", "ceiling"])
+        for label, lineup in sorted(alternative_lineups.items()):
+            for row in _iter_lineup_rows(label, lineup):
+                writer.writerow(row)
+
+    exposures: dict[str, int] = {}
+    lineup_count = 1 + len(alternative_lineups)
+    for row in _iter_lineup_rows("optimal", optimal_lineup):
+        exposures[row[3]] = exposures.get(row[3], 0) + 1
+    for label, lineup in sorted(alternative_lineups.items()):
+        for row in _iter_lineup_rows(label, lineup):
+            exposures[row[3]] = exposures.get(row[3], 0) + 1
+
+    with open(output_dir / "team_exposure.tsv", "w", newline="", encoding="utf-8") as file_handle:
+        writer = csv.writer(file_handle, delimiter="\t")
+        writer.writerow(["team", "selections", "share"])
+        for team_name, selections in sorted(exposures.items(), key=lambda item: (-item[1], item[0])):
+            writer.writerow([team_name, selections, f"{selections / lineup_count:.3f}"])
 
 
 def write_diagnostics(diagnostics: LoadDiagnostics, output_dir: Path) -> None:

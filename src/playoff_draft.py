@@ -16,7 +16,7 @@ from data_loader import DataLoader, ResourceFiles
 from models import estimate_expected_games, project_goalie_teams, project_skaters
 from optimizer import LineupConstraints, optimize_lineup
 from player import Player
-from reporting import write_diagnostics, write_ranked_results
+from reporting import write_diagnostics, write_draft_outputs, write_ranked_results
 from team import Team
 
 
@@ -87,10 +87,25 @@ def main():
 
     expected_games_stats = estimate_expected_games(loader.to_team_odds_inputs(teams), method=EXPECTED_GAMES_METHOD)
     expected_team_games = {team: stats.mean for team, stats in expected_games_stats.items()}
+    expected_team_games_std = {team: stats.std for team, stats in expected_games_stats.items()}
+    expected_team_games_p10 = {team: stats.p10 for team, stats in expected_games_stats.items()}
+    expected_team_games_p90 = {team: stats.p90 for team, stats in expected_games_stats.items()}
     skater_inputs = loader.to_skater_projection_inputs(players)
     goalie_team_inputs = loader.to_goalie_team_projection_inputs(teams)
-    skater_projections = project_skaters(skater_inputs, expected_team_games)
-    goalie_team_projections = project_goalie_teams(goalie_team_inputs, expected_team_games)
+    skater_projections = project_skaters(
+        skater_inputs,
+        expected_team_games,
+        expected_team_games_std=expected_team_games_std,
+        expected_team_games_p10=expected_team_games_p10,
+        expected_team_games_p90=expected_team_games_p90,
+    )
+    goalie_team_projections = project_goalie_teams(
+        goalie_team_inputs,
+        expected_team_games,
+        expected_team_games_std=expected_team_games_std,
+        expected_team_games_p10=expected_team_games_p10,
+        expected_team_games_p90=expected_team_games_p90,
+    )
 
     lineup = optimize_lineup(
         forwards=[x for x in skater_projections if x.position == "F"],
@@ -102,8 +117,40 @@ def main():
             goalie_teams=ROSTER.goalie_teams,
         ),
     )
+    high_floor_lineup = optimize_lineup(
+        forwards=[x for x in skater_projections if x.position == "F"],
+        defense=[x for x in skater_projections if x.position == "D"],
+        goalie_teams=goalie_team_projections,
+        constraints=LineupConstraints(
+            forwards=ROSTER.forwards,
+            defense=ROSTER.defense,
+            goalie_teams=ROSTER.goalie_teams,
+        ),
+        risk_lambda=0.5,
+    )
+    high_ceiling_lineup = optimize_lineup(
+        forwards=[x for x in skater_projections if x.position == "F"],
+        defense=[x for x in skater_projections if x.position == "D"],
+        goalie_teams=goalie_team_projections,
+        constraints=LineupConstraints(
+            forwards=ROSTER.forwards,
+            defense=ROSTER.defense,
+            goalie_teams=ROSTER.goalie_teams,
+        ),
+        risk_lambda=-0.5,
+    )
 
     write_ranked_results(teams, players, OUTPUT_DIR)
+    write_draft_outputs(
+        output_dir=OUTPUT_DIR,
+        skater_projections=skater_projections,
+        goalie_team_projections=goalie_team_projections,
+        optimal_lineup=lineup,
+        alternative_lineups={
+            "high_floor": high_floor_lineup,
+            "high_ceiling": high_ceiling_lineup,
+        },
+    )
     write_diagnostics(loader.diagnostics, OUTPUT_DIR)
 
     print(loader.diagnostics_summary())
