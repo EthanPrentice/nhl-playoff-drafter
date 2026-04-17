@@ -6,7 +6,8 @@ This project currently provides:
 - TSV-based data loading with validation/diagnostics,
 - heuristic team/player valuation,
 - typed projection contracts and scoring helpers,
-- lineup optimization skeleton (5F / 3D / 2 goalie teams),
+- lineup optimization under exact roster constraints (5F / 3D / 2 goalie teams),
+- a backtesting/calibration harness across historical seasons and parameter grids,
 - ranked output exports for downstream draft decisions.
 
 ---
@@ -37,6 +38,7 @@ At a high level, the pipeline:
 5. Builds typed projection inputs and projected values.
 6. Selects a lineup under roster constraints.
 7. Writes ranked TSV outputs to `out/season_2026`.
+8. Optionally runs historical backtests and writes metrics to `out/backtest`.
 
 The current optimizer is intentionally simple (greedy by projected value) and is planned to be replaced by a constrained optimization model in a follow-up phase.
 
@@ -194,7 +196,34 @@ python -m unittest discover -s tests -p 'test_*.py'
 
 Current test coverage includes:
 - config defaults (`tests/test_config.py`),
-- data loader validation and strict-mode behavior (`tests/test_data_loader.py`).
+- data loader validation and strict-mode behavior (`tests/test_data_loader.py`),
+- scoring/model/optimizer behavior and backtest metric math (`tests/test_*.py`).
+
+Run the backtesting harness:
+
+```bash
+python scripts/backtest.py --seasons 2024 2025 --method analytic --k-values 10 20 30 --risk-lambda-grid 0 0.1 0.2
+```
+
+Backtesting compares projections built from `resources/<season>/players_season.tsv` + `players_stretch.tsv`
+against realized playoff outcomes from:
+
+- required: `resources/<season>/players_playoffs.tsv` (same schema as `players_season.tsv`)
+- optional: `resources/<season>/teams_playoffs.tsv` (`Name`, `EV`) for goalie-team realized scoring
+
+If you keep realized files outside `resources/<season>/`, provide explicit files via `--realized-root`:
+
+```bash
+python scripts/backtest.py --seasons 2025 --method analytic --realized-root /path/to/realized
+```
+
+Expected files under `--realized-root`:
+- `season_<year>_skaters.tsv` with columns: `Name`, `Team`, `Pos`, `P`, `OTG` (`OTG` optional)
+- optional `season_<year>_goalie_teams.tsv` with columns: `Name`, `EV`
+
+Backtesting outputs:
+- `out/backtest/summary.tsv`
+- `out/backtest/season_<year>_details.tsv`
 
 ---
 
