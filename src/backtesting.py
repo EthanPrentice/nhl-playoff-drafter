@@ -280,6 +280,14 @@ def run_season_backtest(
     method: str,
     shrinkage_k: int,
     risk_lambda: float,
+    min_stretch_gp_for_direct_weight: int = 10,
+    max_skaters_per_team: int | None = None,
+    max_total_from_team_including_goalie_team: int | None = None,
+    series_len_r1: float = 5.9,
+    series_len_r2: float = 5.9,
+    series_len_r3: float = 5.9,
+    series_len_r4: float = 5.9,
+    monte_carlo_simulations: int = 20_000,
     realized_root_dir: Path | None = None,
 ) -> SeasonBacktestResult:
     resources_dir = root_dir / "resources" / str(season)
@@ -304,13 +312,22 @@ def run_season_backtest(
     set_team_estimated_values(teams, players, heuristics.get_team_weight_diff_penalty)
     set_player_estimated_values(players, heuristics.sum_team_odds_multiply_points_stretch_weighted_per_game)
 
-    expected_games = estimate_expected_games(loader.to_team_odds_inputs(teams), method=method)
+    expected_games = estimate_expected_games(
+        loader.to_team_odds_inputs(teams),
+        method=method,
+        monte_carlo_simulations=monte_carlo_simulations,
+        series_len_r1=series_len_r1,
+        series_len_r2=series_len_r2,
+        series_len_r3=series_len_r3,
+        series_len_r4=series_len_r4,
+    )
     expected_team_games = {team_name: stats.mean for team_name, stats in expected_games.items()}
 
     skater_projections = project_skaters(
         loader.to_skater_projection_inputs(players),
         expected_team_games,
         stretch_shrinkage_k=shrinkage_k,
+        min_stretch_gp_for_direct_weight=min_stretch_gp_for_direct_weight,
     )
     goalie_projections = project_goalie_teams(loader.to_goalie_team_projection_inputs(teams), expected_team_games)
 
@@ -318,7 +335,13 @@ def run_season_backtest(
         forwards=[item for item in skater_projections if item.position == "F"],
         defense=[item for item in skater_projections if item.position == "D"],
         goalie_teams=goalie_projections,
-        constraints=LineupConstraints(forwards=ROSTER.forwards, defense=ROSTER.defense, goalie_teams=ROSTER.goalie_teams),
+        constraints=LineupConstraints(
+            forwards=ROSTER.forwards,
+            defense=ROSTER.defense,
+            goalie_teams=ROSTER.goalie_teams,
+            max_skaters_per_team=max_skaters_per_team,
+            max_total_from_team_including_goalie_team=max_total_from_team_including_goalie_team,
+        ),
         risk_lambda=risk_lambda,
     )
 

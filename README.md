@@ -8,6 +8,7 @@ This project currently provides:
 - typed projection contracts and scoring helpers,
 - lineup optimization under exact roster constraints (5F / 3D / 2 goalie teams),
 - a backtesting/calibration harness across historical seasons and parameter grids,
+- a two-stage tuning harness (coarse sweep + local refinement) with run lineage output,
 - ranked output exports for downstream draft decisions.
 
 ---
@@ -39,6 +40,7 @@ At a high level, the pipeline:
 6. Selects a lineup under roster constraints.
 7. Writes ranked TSV outputs to `out/season_2026`.
 8. Optionally runs historical backtests and writes metrics to `out/backtest`.
+9. Optionally runs iterative tuning and writes search lineage to `out/tuning`.
 
 The current optimizer is intentionally simple (greedy by projected value) and is planned to be replaced by a constrained optimization model in a follow-up phase.
 
@@ -224,6 +226,22 @@ Expected files under `--realized-root`:
 Backtesting outputs:
 - `out/backtest/summary.tsv`
 - `out/backtest/season_<year>_details.tsv`
+
+Run the tuning harness:
+
+```bash
+python scripts/tune.py --seasons 2024 2025
+```
+
+To include team-exposure cap constraints in the tuning grid (slower due constrained combinatorial lineup search):
+
+```bash
+python scripts/tune.py --seasons 2024 2025 --include-exposure-caps
+```
+
+Tuning outputs:
+- `out/tuning/runs.tsv` (timestamp, git commit, config ID, stage, parent run lineage, runtime, and metrics)
+- `out/tuning/candidates.tsv` (top converged candidate configs that pass baseline gates)
 
 ---
 

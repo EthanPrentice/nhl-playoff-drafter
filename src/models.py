@@ -99,6 +99,42 @@ def expected_games_analytic(team_odds: TeamOddsInput) -> ExpectedGamesResult:
     return ExpectedGamesResult(mean=expected_games, std=std, p10=p10, p90=p90)
 
 
+def expected_games_analytic_with_series_lengths(
+    team_odds: TeamOddsInput,
+    series_len_r1: float,
+    series_len_r2: float,
+    series_len_r3: float,
+    series_len_r4: float,
+) -> ExpectedGamesResult:
+    p1, p2, p3, _ = _independent_round_probabilities(team_odds)
+    q2 = p1
+    q3 = p1 * p2
+    q4 = p1 * p2 * p3
+
+    expected_games = (
+        series_len_r1
+        + (q2 * series_len_r2)
+        + (q3 * series_len_r3)
+        + (q4 * series_len_r4)
+    )
+
+    variance = (
+        (series_len_r2**2) * q2 * (1.0 - q2)
+        + (series_len_r3**2) * q3 * (1.0 - q3)
+        + (series_len_r4**2) * q4 * (1.0 - q4)
+        + (2.0 * series_len_r2 * series_len_r3 * q3 * (1.0 - q2))
+        + (2.0 * series_len_r2 * series_len_r4 * q4 * (1.0 - q2))
+        + (2.0 * series_len_r3 * series_len_r4 * q4 * (1.0 - q3))
+    )
+    std = math.sqrt(max(0.0, variance))
+    spread = 1.28155 * std
+    max_total = series_len_r1 + series_len_r2 + series_len_r3 + series_len_r4
+    p10 = max(series_len_r1, expected_games - spread)
+    p90 = min(max_total, expected_games + spread)
+
+    return ExpectedGamesResult(mean=expected_games, std=std, p10=p10, p90=p90)
+
+
 def _sample_series_length(rand: random.Random) -> int:
     # Lightweight empirical prior for playoff series length.
     roll = rand.random()
@@ -165,16 +201,33 @@ def expected_games_monte_carlo(
 def estimate_expected_games(
     team_odds_inputs: list[TeamOddsInput],
     method: str = EXPECTED_GAMES_METHOD,
+    monte_carlo_simulations: int = EXPECTED_GAMES_MONTE_CARLO_SIMULATIONS,
+    series_len_r1: float = EXPECTED_SERIES_LENGTH_R1,
+    series_len_r2: float = EXPECTED_SERIES_LENGTH_R2,
+    series_len_r3: float = EXPECTED_SERIES_LENGTH_R3,
+    series_len_r4: float = EXPECTED_SERIES_LENGTH_R4,
 ) -> dict[str, ExpectedGamesResult]:
     results: dict[str, ExpectedGamesResult] = {}
     for item in team_odds_inputs:
         if method == "monte_carlo":
             try:
-                result = expected_games_monte_carlo(item)
+                result = expected_games_monte_carlo(item, simulations=monte_carlo_simulations)
             except Exception:
-                result = expected_games_analytic(item)
+                result = expected_games_analytic_with_series_lengths(
+                    item,
+                    series_len_r1=series_len_r1,
+                    series_len_r2=series_len_r2,
+                    series_len_r3=series_len_r3,
+                    series_len_r4=series_len_r4,
+                )
         else:
-            result = expected_games_analytic(item)
+            result = expected_games_analytic_with_series_lengths(
+                item,
+                series_len_r1=series_len_r1,
+                series_len_r2=series_len_r2,
+                series_len_r3=series_len_r3,
+                series_len_r4=series_len_r4,
+            )
         results[item.team] = result
     return results
 
